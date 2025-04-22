@@ -1,11 +1,12 @@
 import pygame
 import sys
+import math
 
 # Initialize Pygame
 pygame.init()
 
 # === Constants ===
-WIDTH, HEIGHT = 600, 700  # Extra height for Restart Button
+WIDTH, HEIGHT = 600, 700
 ROWS, COLS = 3, 3
 SQUARE_SIZE = WIDTH // COLS
 LINE_WIDTH = 10
@@ -15,26 +16,37 @@ CROSS_WIDTH = 20
 SPACE = SQUARE_SIZE // 5
 
 # === Colors ===
-BG_TOP = (255, 204, 229)       # Light Pink
-BG_BOTTOM = (204, 255, 229)    # Mint Green
+BG_TOP = (255, 204, 229)
+BG_BOTTOM = (204, 255, 229)
 LINE_COLOR = (255, 255, 255)
-CIRCLE_COLOR = (255, 105, 180)  # Hot Pink
-CROSS_COLOR = (0, 191, 255)     # Deep Sky Blue
+CIRCLE_COLOR = (255, 105, 180)
+CROSS_COLOR = (0, 191, 255)
 BUTTON_COLOR = (255, 255, 255)
 BUTTON_TEXT_COLOR = (0, 0, 0)
 
 # === Fonts ===
 MAIN_FONT = pygame.font.SysFont("comicsansms", 70, bold=True)
 BUTTON_FONT = pygame.font.SysFont("comicsansms", 40, bold=True)
+WELCOME_FONT = pygame.font.SysFont("timesnewroman", 50, bold=True)
+TITLE_FONT = pygame.font.SysFont("comicsansms", 60, bold=True)
 
 # === Setup ===
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Tic Tac Toe")
+clock = pygame.time.Clock()
 
 # === Game State ===
 board = [[None for _ in range(COLS)] for _ in range(ROWS)]
 player = "X"
 game_over = False
+welcome_screen = True
+start_animation = False
+animation_done = False
+animation_progress = 0
+
+# === Glow effect tracking ===
+glow_cells = []
+glow_duration = 15
 
 # === Drawing Functions ===
 def draw_gradient_background():
@@ -61,16 +73,26 @@ def draw_figures():
                 pygame.draw.circle(screen, CIRCLE_COLOR, (centerX, centerY), CIRCLE_RADIUS, CIRCLE_WIDTH)
                 pygame.draw.circle(screen, (255, 255, 255), (centerX, centerY), CIRCLE_RADIUS - 10, 5)
             elif board[row][col] == "X":
-                # Descending diagonal
                 pygame.draw.line(screen, CROSS_COLOR,
                                  (col * SQUARE_SIZE + SPACE, row * SQUARE_SIZE + SPACE),
                                  (col * SQUARE_SIZE + SQUARE_SIZE - SPACE, row * SQUARE_SIZE + SQUARE_SIZE - SPACE),
                                  CROSS_WIDTH)
-                # Ascending diagonal
                 pygame.draw.line(screen, CROSS_COLOR,
                                  (col * SQUARE_SIZE + SPACE, row * SQUARE_SIZE + SQUARE_SIZE - SPACE),
                                  (col * SQUARE_SIZE + SQUARE_SIZE - SPACE, row * SQUARE_SIZE + SPACE),
                                  CROSS_WIDTH)
+
+def draw_glow_effect():
+    for cell in glow_cells:
+        row, col, symbol, frame = cell
+        if frame < glow_duration:
+            alpha = int(255 * (1 - frame / glow_duration))
+            glow_color = CROSS_COLOR if symbol == "X" else CIRCLE_COLOR
+            glow_surface = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
+            pygame.draw.rect(glow_surface, (*glow_color, alpha), glow_surface.get_rect(), border_radius=10)
+            screen.blit(glow_surface, (col * SQUARE_SIZE, row * SQUARE_SIZE))
+            cell[3] += 1
+    glow_cells[:] = [cell for cell in glow_cells if cell[3] < glow_duration]
 
 def draw_winner(winner):
     text = MAIN_FONT.render(f"{winner} wins!", True, (255, 255, 255))
@@ -88,20 +110,59 @@ def draw_restart_button():
                        button_rect.centery - text.get_height() // 2))
     return button_rect
 
+def draw_welcome_screen(glow_phase):
+    draw_gradient_background()
+
+    glow = int(127.5 * (1 + math.sin(glow_phase)))
+    welcome_color = (glow, 0, glow)
+    welcome_text = WELCOME_FONT.render("WELCOME TO", True, welcome_color)
+    screen.blit(welcome_text, (WIDTH // 2 - welcome_text.get_width() // 2, 150))
+
+    title_text = TITLE_FONT.render("Tic Tac Toe", True, (0, 0, 0))
+    screen.blit(title_text, (WIDTH // 2 - title_text.get_width() // 2, 230))
+
+    button_rect = pygame.Rect(WIDTH // 2 - 100, 520, 200, 60)
+    pygame.draw.rect(screen, BUTTON_COLOR, button_rect, border_radius=20)
+    button_text = BUTTON_FONT.render("Start", True, BUTTON_TEXT_COLOR)
+    screen.blit(button_text, (button_rect.centerx - button_text.get_width() // 2,
+                              button_rect.centery - button_text.get_height() // 2))
+
+    return button_rect
+
+def draw_spinning_xo(progress):
+    icons = ['X', 'O', 'X', 'O']
+    start_y = 420
+    spacing = 110
+    for i, symbol in enumerate(icons):
+        angle = -progress * 5 + i * 45
+        x_pos = 50 + (progress % 200) + i * spacing
+        y_offset = 30 * math.sin(progress / 15 + i)
+        center = (int(x_pos), int(start_y + y_offset))
+        draw_rotated_symbol(symbol, center, angle)
+
+def draw_rotated_symbol(symbol, center, angle):
+    surf = pygame.Surface((100, 100), pygame.SRCALPHA)
+    if symbol == 'X':
+        pygame.draw.line(surf, CROSS_COLOR, (20, 20), (70, 70), 12)
+        pygame.draw.line(surf, CROSS_COLOR, (20, 70), (70, 20), 12)
+    else:
+        pygame.draw.circle(surf, CIRCLE_COLOR, (40, 40), 35, 12)
+
+    rotated = pygame.transform.rotate(surf, angle)
+    rect = rotated.get_rect(center=center)
+    screen.blit(rotated, rect.topleft)
+
 # === Game Logic ===
 def check_winner():
     global game_over
-    # Rows
     for row in board:
         if row.count(row[0]) == COLS and row[0] is not None:
             game_over = True
             return row[0]
-    # Columns
     for col in range(COLS):
         if board[0][col] == board[1][col] == board[2][col] and board[0][col] is not None:
             game_over = True
             return board[0][col]
-    # Diagonals
     if board[0][0] == board[1][1] == board[2][2] and board[0][0] is not None:
         game_over = True
         return board[0][0]
@@ -114,43 +175,66 @@ def check_draw():
     return all(None not in row for row in board)
 
 def restart_game():
-    global board, player, game_over
+    global board, player, game_over, glow_cells
     board = [[None for _ in range(COLS)] for _ in range(ROWS)]
     player = "X"
     game_over = False
+    glow_cells = []
 
 # === Main Loop ===
 running = True
+glow_phase = 0
+
 while running:
-    draw_board()
-    draw_figures()
-
-    winner = check_winner()
-    if winner:
-        draw_winner(winner)
-    elif check_draw():
-        draw_draw()
-        game_over = True
-
-    restart_button = draw_restart_button()
-    pygame.display.update()
+    screen.fill((0, 0, 0))
+    clock.tick(60)
+    glow_phase += 0.05
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
 
-        # Click to restart
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            if restart_button.collidepoint(event.pos):
-                restart_game()
-            elif not game_over:
-                mouseX, mouseY = event.pos
-                if mouseY < SQUARE_SIZE * ROWS:
-                    row = mouseY // SQUARE_SIZE
-                    col = mouseX // SQUARE_SIZE
-                    if board[row][col] is None:
-                        board[row][col] = player
-                        player = "O" if player == "X" else "X"
+        elif welcome_screen and not start_animation and event.type == pygame.MOUSEBUTTONDOWN:
+            start_button_rect = draw_welcome_screen(glow_phase)
+            if start_button_rect.collidepoint(event.pos):
+                start_animation = True
+
+        elif not welcome_screen:
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                restart_button = draw_restart_button()
+                if restart_button.collidepoint(event.pos):
+                    restart_game()
+                elif not game_over:
+                    mouseX, mouseY = event.pos
+                    if mouseY < SQUARE_SIZE * ROWS:
+                        row = mouseY // SQUARE_SIZE
+                        col = mouseX // SQUARE_SIZE
+                        if board[row][col] is None:
+                            board[row][col] = player
+                            glow_cells.append([row, col, player, 0])
+                            player = "O" if player == "X" else "X"
+
+    if welcome_screen:
+        start_button_rect = draw_welcome_screen(glow_phase)
+        if start_animation:
+            draw_spinning_xo(animation_progress)
+            animation_progress += 1
+            if animation_progress > 120:
+                welcome_screen = False
+    else:
+        draw_board()
+        draw_glow_effect()
+        draw_figures()
+
+        winner = check_winner()
+        if winner:
+            draw_winner(winner)
+        elif check_draw():
+            draw_draw()
+            game_over = True
+        draw_restart_button()
+
+    pygame.display.update()
 
 pygame.quit()
 sys.exit()
