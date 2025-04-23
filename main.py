@@ -22,6 +22,7 @@ LINE_COLOR = (255, 255, 255)
 CIRCLE_COLOR = (255, 105, 180)
 CROSS_COLOR = (0, 191, 255)
 BUTTON_COLOR = (255, 255, 255)
+BUTTON_HOVER_COLOR = (200, 255, 200)
 BUTTON_TEXT_COLOR = (0, 0, 0)
 
 # === Fonts ===
@@ -47,6 +48,10 @@ animation_progress = 0
 # === Glow effect tracking ===
 glow_cells = []
 glow_duration = 15
+
+# === Winning line animation ===
+winning_line = None
+winning_line_progress = 0
 
 # === Drawing Functions ===
 def draw_gradient_background():
@@ -104,7 +109,9 @@ def draw_draw():
 
 def draw_restart_button():
     button_rect = pygame.Rect(WIDTH // 2 - 100, HEIGHT - 80, 200, 50)
-    pygame.draw.rect(screen, BUTTON_COLOR, button_rect, border_radius=15)
+    mouse_pos = pygame.mouse.get_pos()
+    color = BUTTON_HOVER_COLOR if button_rect.collidepoint(mouse_pos) else BUTTON_COLOR
+    pygame.draw.rect(screen, color, button_rect, border_radius=15)
     text = BUTTON_FONT.render("Restart", True, BUTTON_TEXT_COLOR)
     screen.blit(text, (button_rect.centerx - text.get_width() // 2,
                        button_rect.centery - text.get_height() // 2))
@@ -122,7 +129,9 @@ def draw_welcome_screen(glow_phase):
     screen.blit(title_text, (WIDTH // 2 - title_text.get_width() // 2, 230))
 
     button_rect = pygame.Rect(WIDTH // 2 - 100, 520, 200, 60)
-    pygame.draw.rect(screen, BUTTON_COLOR, button_rect, border_radius=20)
+    mouse_pos = pygame.mouse.get_pos()
+    color = BUTTON_HOVER_COLOR if button_rect.collidepoint(mouse_pos) else BUTTON_COLOR
+    pygame.draw.rect(screen, color, button_rect, border_radius=20)
     button_text = BUTTON_FONT.render("Start", True, BUTTON_TEXT_COLOR)
     screen.blit(button_text, (button_rect.centerx - button_text.get_width() // 2,
                               button_rect.centery - button_text.get_height() // 2))
@@ -152,22 +161,47 @@ def draw_rotated_symbol(symbol, center, angle):
     rect = rotated.get_rect(center=center)
     screen.blit(rotated, rect.topleft)
 
+def draw_winning_line():
+    global winning_line_progress
+    if winning_line:
+        (start_col, start_row), (end_col, end_row) = winning_line
+        x1 = start_col * SQUARE_SIZE + SQUARE_SIZE // 2
+        y1 = start_row * SQUARE_SIZE + SQUARE_SIZE // 2
+        x2 = end_col * SQUARE_SIZE + SQUARE_SIZE // 2
+        y2 = end_row * SQUARE_SIZE + SQUARE_SIZE // 2
+
+        progress = min(winning_line_progress / 30, 1)
+        current_x = x1 + (x2 - x1) * progress
+        current_y = y1 + (y2 - y1) * progress
+
+        color1 = (255, 0, 255)
+        color2 = (0, 255, 255)
+        blend = lambda c1, c2, t: tuple(int(c1[i] + (c2[i] - c1[i]) * t) for i in range(3))
+        animated_color = blend(color1, color2, math.sin(winning_line_progress / 5) * 0.5 + 0.5)
+
+        pygame.draw.line(screen, animated_color, (x1, y1), (current_x, current_y), 15)
+        winning_line_progress += 1
+
 # === Game Logic ===
 def check_winner():
-    global game_over
-    for row in board:
+    global game_over, winning_line
+    for i, row in enumerate(board):
         if row.count(row[0]) == COLS and row[0] is not None:
             game_over = True
+            winning_line = ((0, i), (2, i))
             return row[0]
     for col in range(COLS):
         if board[0][col] == board[1][col] == board[2][col] and board[0][col] is not None:
             game_over = True
+            winning_line = ((col, 0), (col, 2))
             return board[0][col]
     if board[0][0] == board[1][1] == board[2][2] and board[0][0] is not None:
         game_over = True
+        winning_line = ((0, 0), (2, 2))
         return board[0][0]
     if board[0][2] == board[1][1] == board[2][0] and board[0][2] is not None:
         game_over = True
+        winning_line = ((2, 0), (0, 2))
         return board[0][2]
     return None
 
@@ -175,11 +209,13 @@ def check_draw():
     return all(None not in row for row in board)
 
 def restart_game():
-    global board, player, game_over, glow_cells
+    global board, player, game_over, glow_cells, winning_line, winning_line_progress
     board = [[None for _ in range(COLS)] for _ in range(ROWS)]
     player = "X"
     game_over = False
     glow_cells = []
+    winning_line = None
+    winning_line_progress = 0
 
 # === Main Loop ===
 running = True
@@ -229,6 +265,7 @@ while running:
         winner = check_winner()
         if winner:
             draw_winner(winner)
+            draw_winning_line()
         elif check_draw():
             draw_draw()
             game_over = True
@@ -238,3 +275,4 @@ while running:
 
 pygame.quit()
 sys.exit()
+
