@@ -271,7 +271,7 @@ while running:
             game_over = True
         draw_restart_button()
 
-    pygame.display.update()
+    pygame. display.update()
 
 pygame.quit()
 sys.exit()
