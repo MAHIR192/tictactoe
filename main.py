@@ -1,9 +1,20 @@
 import pygame
 import sys
 import math
-
 # Initialize Pygame
 pygame.init()
+
+# === SOUND INITIALIZATION ===
+pygame.mixer.init()
+pygame.mixer.music.load("Background.mp3")  
+pygame.mixer.music.set_volume(0.5)
+pygame.mixer.music.play(-1)
+
+start_sound = pygame.mixer.Sound("game-start-and-reset-_-final.wav")
+x_sound = pygame.mixer.Sound("select-sound-xxx.wav")
+o_sound = pygame.mixer.Sound("select-sound-ooo.wav")
+win_sound = pygame.mixer.Sound("success-1-fiinal.wav")
+draw_sound = pygame.mixer.Sound("draw-4-_final.wav")
 
 # === Constants ===
 WIDTH, HEIGHT = 600, 700
@@ -39,6 +50,7 @@ clock = pygame.time.Clock()
 # === Game State ===
 board = [[None for _ in range(COLS)] for _ in range(ROWS)]
 player = "X"
+win_sound_played = False
 game_over = False
 welcome_screen = True
 start_animation = False
@@ -189,33 +201,40 @@ def check_winner():
         if row.count(row[0]) == COLS and row[0] is not None:
             game_over = True
             winning_line = ((0, i), (2, i))
+            win_sound.play()
             return row[0]
     for col in range(COLS):
         if board[0][col] == board[1][col] == board[2][col] and board[0][col] is not None:
             game_over = True
             winning_line = ((col, 0), (col, 2))
+            win_sound.play()
             return board[0][col]
     if board[0][0] == board[1][1] == board[2][2] and board[0][0] is not None:
         game_over = True
         winning_line = ((0, 0), (2, 2))
+        win_sound.play()
         return board[0][0]
     if board[0][2] == board[1][1] == board[2][0] and board[0][2] is not None:
         game_over = True
         winning_line = ((2, 0), (0, 2))
+        win_sound.play()
         return board[0][2]
     return None
+
 
 def check_draw():
     return all(None not in row for row in board)
 
 def restart_game():
-    global board, player, game_over, glow_cells, winning_line, winning_line_progress
+    global board, player, game_over, glow_cells, winning_line, winning_line_progress, win_sound_played
     board = [[None for _ in range(COLS)] for _ in range(ROWS)]
     player = "X"
     game_over = False
     glow_cells = []
     winning_line = None
     winning_line_progress = 0
+    win_sound_played = False
+    start_sound.play()
 
 # === Main Loop ===
 running = True
@@ -234,7 +253,7 @@ while running:
             start_button_rect = draw_welcome_screen(glow_phase)
             if start_button_rect.collidepoint(event.pos):
                 start_animation = True
-
+                start_sound.play()
         elif not welcome_screen:
             if event.type == pygame.MOUSEBUTTONDOWN:
                 restart_button = draw_restart_button()
@@ -248,7 +267,12 @@ while running:
                         if board[row][col] is None:
                             board[row][col] = player
                             glow_cells.append([row, col, player, 0])
-                            player = "O" if player == "X" else "X"
+                            if player == "X":
+                                x_sound.play()
+                                player = "O"
+                            else:
+                                o_sound.play()
+                                player = "X"
 
     if welcome_screen:
         start_button_rect = draw_welcome_screen(glow_phase)
@@ -257,6 +281,7 @@ while running:
             animation_progress += 1
             if animation_progress > 120:
                 welcome_screen = False
+                pygame.mixer.music.stop()
     else:
         draw_board()
         draw_glow_effect()
@@ -266,9 +291,15 @@ while running:
         if winner:
             draw_winner(winner)
             draw_winning_line()
+            if not win_sound_played:
+                win_sound.play()
+                win_sound_played = True
         elif check_draw():
             draw_draw()
+            if not game_over:
+                draw_sound.play()
             game_over = True
+
         draw_restart_button()
 
     pygame.display.update()
